@@ -21,6 +21,25 @@
 #include "auto_aim_core.hpp"
 #include "config.hpp"
 
+namespace
+{
+const char* targetStatusName(TargetStatus status)
+{
+    switch (status)
+    {
+        case TargetStatus::DETECTED:
+            return "DETECTED";
+        case TargetStatus::TRACKING:
+            return "TRACKING";
+        case TargetStatus::TEMP_LOST:
+            return "TEMP_LOST";
+        case TargetStatus::NO_TARGET:
+        default:
+            return "NO_TARGET";
+    }
+}
+}
+
 class AutoAimOpenLoop : public rclcpp::Node
 {
 public:
@@ -396,6 +415,7 @@ private:
             << "  Rects: " << aim_result.rects.size()
             << "  Lights: " << aim_result.light_bars.size()
             << "  Armors: " << aim_result.armors.size()
+            << "  Target: " << targetStatusName(aim_result.target.status)
             << "  Control: "
             << (control_enabled_ ? "ON" : "OFF");
 

@@ -2,15 +2,26 @@ use bevy::prelude::*;
 use bevy::render::view::screenshot::{Capturing, Screenshot, save_to_disk};
 use bevy::window::{CursorIcon, SystemCursorIcon, Window};
 
-use crate::components::{SlapperInfantry, SubscribeAutoAim};
+use crate::components::{CameraMode, FollowingType, SlapperInfantry, SubscribeAutoAim};
 use crate::robomaster::prelude::{Armor, ArmorStickerSelection};
 use crate::statistic::ProjectileStatistics;
 use crate::systems::input::FlightMode;
 
-fn create_help_text(auto_aim: bool, flight: bool, stats: &ProjectileStatistics) -> Text {
+fn create_help_text(
+    auto_aim: bool,
+    camera_mode: FollowingType,
+    flight: bool,
+    stats: &ProjectileStatistics,
+) -> Text {
+    let camera = match camera_mode {
+        FollowingType::Robot => "ROBOT",
+        FollowingType::ThirdPerson => "THIRD",
+        FollowingType::Free => "FREE",
+    };
     format!(
-        "auto-aim={} flight={} total={} accurate={} pct={:.2}\nControls: F2-Screenshot F3-Change Camera | WASD-Move Mouse-Look Space-Shoot G-Dart | H-Flight R-Jump/Up X-Down",
+        "auto-aim={} camera={} flight={} total={} accurate={} pct={:.2}\nControls: F2-Screenshot F3-Change Camera | WASD-Move Mouse-Look Space-Shoot G-Dart | H-Flight R-Jump/Up X-Down",
         if auto_aim { "ON " } else { "OFF" },
+        camera,
         if flight { "ON " } else { "OFF" },
         stats.launch_count,
         stats.accurate_count,
@@ -34,12 +45,14 @@ pub fn spawn_text(commands: &mut Commands) {
 pub fn update_help_text(
     mut text: Query<&mut Text>,
     auto_aim: Res<SubscribeAutoAim>,
+    camera_mode: Res<CameraMode>,
     flight: Res<FlightMode>,
     stats: Res<ProjectileStatistics>,
 ) {
     for mut text in text.iter_mut() {
         *text = create_help_text(
             auto_aim.load(std::sync::atomic::Ordering::Acquire),
+            camera_mode.0,
             flight.enabled,
             &stats,
         );

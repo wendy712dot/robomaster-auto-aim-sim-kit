@@ -73,7 +73,9 @@ bash scripts/build.sh
 bash scripts/run.sh
 ```
 
-成功后会出现仿真器窗口。按一次 `F5` 打开自动控制；再次按下会关闭。默认关闭是为了防止测试程序意外接管云台。
+成功后会出现仿真器窗口。先点击窗口，再按一次 `F5` 打开自动控制；再次按下会关闭。默认关闭是为了防止测试程序意外接管云台。左下角必须显示 `auto-aim=ON`；ThinkPad 等笔记本若把 F5 用作硬件功能键，请使用 `Fn+F5`。
+
+左下角还会显示相机模式。闭环自瞄时必须使用 `camera=ROBOT`，此时 `/image_raw` 是随云台转动的第一人称画面。`F3` 会在 `ROBOT`、`THIRD` 和 `FREE` 三种模式间循环；后两种适合观察场景，但画面不会随受控云台转动，不能用来判断闭环是否居中。
 
 不要关闭终端 A。另开终端 B，进入同一个仓库并加载 ROS2 环境：
 
@@ -171,11 +173,28 @@ source scripts/env.sh
 ros2 run auto_aim_ros2 auto_aim_open_loop
 ```
 
-先检查识别框和角度输出。确认颜色、相机参数、距离和方向均正确后，才启用闭环：
+先检查识别框和角度输出。窗口中的 `Target: TRACKING` 表示目标已经通过连续帧确认；`DETECTED` 只是刚检测到，`TEMP_LOST` 表示暂时丢失。只有 `TRACKING` 且 PnP 成功时，例程才发送有效追踪命令。
+
+确认颜色、相机参数、距离和方向均正确后，切换仿真器为 `auto-aim=ON camera=ROBOT`，再从每次最多修正 0.5 度开始闭环：
 
 ```bash
-ros2 run auto_aim_ros2 auto_aim_open_loop --ros-args -p enable_control:=true
+ros2 run auto_aim_ros2 auto_aim_open_loop --ros-args \
+  -p enable_control:=true \
+  -p max_correction_deg:=0.5
 ```
+
+`Control: ON` 只说明例程允许发布控制，不代表仿真器已经打开接收。目标应逐渐回到画面中心，Yaw/Pitch 误差总体减小。验证稳定后可把单次修正提高到 `1.0`；第一次测试不建议直接使用默认的 `2.0`。
+
+如果显示 `Control: ON` 但云台不动，在另一个已执行 `source scripts/env.sh` 的终端检查：
+
+```bash
+ros2 topic info /vision_send_data --verbose
+ros2 topic echo /vision_send_data --once
+```
+
+正常时应各有一个发布者和订阅者；单条消息应有 `target_state: 1`、大于零的 `target_distance`，以及有限的 `yaw/pitch`。有订阅者并不等于 F5 已打开，最终仍以仿真器左下角的 `auto-aim=ON` 为准。
+
+启动后可能需要几帧才能从 `DETECTED` 进入 `TRACKING`，也要等待第一条云台反馈。若数秒后才开始运动，但随后能稳定追踪，这是正常的初始化过程。
 
 仓库没有附带上游测试视频；视频模式需要你自行提供视频并修改 `examples/simplified_auto_aim/config/config.yaml`。
 
@@ -187,14 +206,22 @@ ros2 run auto_aim_ros2 auto_aim_open_loop --ros-args -p enable_control:=true
 | 看不到预期话题 | 仿真器是否仍在运行，两个终端的 `ROS_DOMAIN_ID` 是否相同 |
 | 收不到图像 | 话题名和 QoS；先运行仓库自带的 `image_probe.py` |
 | 图像颜色异常 | 仿真器输出 `rgb8`，OpenCV 常用 BGR |
-| 云台不响应 | 是否按了 `F5`，命令是否有效，是否还有其他发布者 |
+| `Control: ON` 但云台不响应 | 仿真器是否为 `auto-aim=ON`；`Target` 是否为 `TRACKING`；命令是否为 `target_state: 1`；是否还有其他发布者 |
+| 云台在动但图像不随动 | 按 `F3` 切到 `camera=ROBOT`；`THIRD/FREE` 观察视角不绑定云台 |
 | 云台越转越偏 | 度/弧度、绝对角/相对误差、yaw/pitch 正负号 |
 | 控制振荡或延迟增长 | 是否积压旧帧、单次命令是否过大、是否重复使用旧结果 |
 | 程序退出后仍移动 | 正常退出前发送无效目标；强制退出后在窗口按 `F5` |
 | 没有窗口或黑屏 | 显卡驱动、Vulkan、桌面显示会话和 `DISPLAY` |
 | 报 `Invalid surface` | 保持 `present_mode = "auto_vsync"`；运行 `vulkaninfo --summary` 和 `vkcube`；混合显卡再尝试指定适配器 |
 
-如果机器同时有 Intel 核显和 NVIDIA 独显，且 `vkcube` 正常但仍报 `Invalid surface`，先查看 `vulkaninfo --summary` 中的设备名称，再尝试指定能够驱动当前桌面的显卡：
+如果机器同时有 Intel 核显和 NVIDIA 独显，先运行 `prime-select query` 查看 PRIME 模式。若强制 `nvidia` 模式无法正常创建 Vulkan 窗口，可切回按需模式并重启：
+
+```bash
+sudo prime-select on-demand
+sudo reboot
+```
+
+重启后先确认 `vulkaninfo --summary` 和 `vkcube` 能正常运行。若 `vkcube` 正常但仿真器仍报 `Invalid surface`，再根据设备名称指定能够驱动当前桌面的显卡：
 
 ```bash
 WGPU_BACKEND=vulkan WGPU_ADAPTER_NAME=intel bash scripts/run.sh
