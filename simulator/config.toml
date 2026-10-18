@@ -1,9 +1,10 @@
 # Bevy RoboMaster Simulator Configuration
 
 [window]
-# Rendering present mode. Use `auto_no_vsync` to exceed 60Hz for Talos/ROS2 capture.
+# `auto_vsync` is the most portable choice for desktop X11/Wayland surfaces.
+# After the simulator runs correctly, use `auto_no_vsync` only when higher capture FPS is needed.
 # Options: auto_vsync, auto_no_vsync, fifo, fifo_relaxed, mailbox, immediate
-present_mode = "immediate"
+present_mode = "auto_vsync"
 
 [debug]
 # Turn these on only when needed; they noticeably reduce FPS.

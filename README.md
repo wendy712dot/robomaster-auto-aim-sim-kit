@@ -192,6 +192,15 @@ ros2 run auto_aim_ros2 auto_aim_open_loop --ros-args -p enable_control:=true
 | 控制振荡或延迟增长 | 是否积压旧帧、单次命令是否过大、是否重复使用旧结果 |
 | 程序退出后仍移动 | 正常退出前发送无效目标；强制退出后在窗口按 `F5` |
 | 没有窗口或黑屏 | 显卡驱动、Vulkan、桌面显示会话和 `DISPLAY` |
+| 报 `Invalid surface` | 保持 `present_mode = "auto_vsync"`；运行 `vulkaninfo --summary` 和 `vkcube`；混合显卡再尝试指定适配器 |
+
+如果机器同时有 Intel 核显和 NVIDIA 独显，且 `vkcube` 正常但仍报 `Invalid surface`，先查看 `vulkaninfo --summary` 中的设备名称，再尝试指定能够驱动当前桌面的显卡：
+
+```bash
+WGPU_BACKEND=vulkan WGPU_ADAPTER_NAME=intel bash scripts/run.sh
+```
+
+如果桌面由 NVIDIA 驱动，把 `intel` 换成设备名称中能够唯一匹配 NVIDIA 显卡的部分。`WGPU_ADAPTER_NAME` 不区分大小写。
 
 完整字段和坐标约定见[接口说明](docs/interfaces.md)。来源、许可证及验证范围见[项目说明](docs/integration-notes.md)。
 
