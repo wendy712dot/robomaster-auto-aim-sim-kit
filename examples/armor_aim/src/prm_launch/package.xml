@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>prm_launch</name>
+  <version>0.0.0</version>
+  <description>Launch the reduced armor_aim chain against the RoboMaster simulator.</description>
+  <maintainer email="liu2881@purdue.edu">purduerm</maintainer>
+  <license>GPL-3.0-only</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>opencv_armor_detector</depend>
+  <depend>pose_estimator</depend>
+  <depend>aim_output</depend>
+  <depend>vision_msgs</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

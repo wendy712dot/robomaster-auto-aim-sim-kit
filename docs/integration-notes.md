@@ -7,7 +7,7 @@
 - 仿真器基线：[wendy712dot/bevy_robomaster_simulator](https://github.com/wendy712dot/bevy_robomaster_simulator) 的 `fix/ros2-interface-compatibility` 分支，提交 `7c075703d99192b940d1310bf674253f5d08d532`。
 - 上游项目：[HNUYueLuRM/bevy_robomaster_simulator](https://github.com/HNUYueLuRM/bevy_robomaster_simulator) 和 [Blackjack200/bevy_robomaster_simulator](https://github.com/Blackjack200/bevy_robomaster_simulator)。
 - 可选视觉例程：[wendy712dot/simplified-auto-aim-system](https://github.com/wendy712dot/simplified-auto-aim-system)。
-- 接入经验参考：[armor_aim 的 simulator-integration 分支](https://github.com/lijjinyu-coder/armor_aim/tree/feature/simulator-integration)。
+- 多节点视觉例程：[lijjinyu-coder/armor_aim](https://github.com/lijjinyu-coder/armor_aim/tree/feature/simulator-integration)，基线提交 `d445903`。
 
 不同来源使用过不同的云台消息。本仓库只把当前仿真器实际接收的 `/vision_send_data` 作为默认控制接口。不要照搬其他版本的 `/rm_gimbal/cmd` 字段和控制参数。
 
@@ -19,10 +19,10 @@
 - 默认采用兼容性较高的 `auto_vsync` 显示模式，避免部分 X11/混合显卡组合无法创建显示表面。
 - 提供图像接收、固定云台命令和小角度误差适配工具。
 - 适配器会检查非法数值和超时；同一帧视觉结果不会重复累计修正。
-- 保留一套简化 C++ 自瞄作为参考，但不要求你使用它。
+- 保留单进程简化 C++ 自瞄和多节点 armor_aim 两套例程，但不要求你使用其中任何一套。
 - 补充图像编码、CameraInfo、角度单位、正负方向、停止行为和排查说明。
 
-第二套方案只用于参考 QoS、TF、超时保护和输入/输出职责划分，没有把它的完整工程、PID 或另一套云台接口混入默认流程。
+armor_aim 只保留仿真闭环需要的检测、PnP、输出和启动包；硬件相机、导航与旧云台接口未带入。检测与 PnP 保持原方案结构，最外层输出改为本仓库统一的 `VisionSendData`。
 
 ## 已完成的检查
 
@@ -40,11 +40,17 @@
 | 固定云台命令 | 通过；`gimbal_probe.py` 可控制云台并在结束后发送停止状态 |
 | C++ 例程开环识别 | 通过；可检测灯条和装甲板并输出 PnP 角度、距离 |
 | C++ 例程闭环追踪 | 通过；低速限幅下可居中、随动，目标丢失后可恢复 |
+| armor_aim ROS2 包构建 | 通过；6 个包完成构建 |
+| armor_aim 纯控制测试 | 22 项全部通过，包含 TF/反馈基准对齐和 ±180° 环绕 |
+| armor_aim 开环识别 | 通过；暗场参数下稳定识别，实测处理约 45–60 FPS |
+| armor_aim 闭环追踪 | 通过；TF 相对修正锚定反馈角后可低速居中和随动，默认禁止开火 |
 | 完整重启复现 | 通过；重新启动仿真器和例程后闭环仍可工作 |
 
-以上结果验证了仿真器、仓库附带 C++ 例程之间的最小视觉闭环。你自己的视觉程序仍需按 README 独立验证识别、角度转换、目标居中和目标丢失行为。
+以上结果验证了仿真器与仓库附带两套视觉例程之间的最小闭环。你自己的视觉程序仍需按 README 独立验证识别、角度转换、目标居中和目标丢失行为。
 
 实机排查还确认了两点：视觉窗口的 `Control: ON` 只代表例程允许发布，仿真器仍需单独切换为 `auto-aim=ON`；闭环图像必须使用随云台运动的 `camera=ROBOT`，第三人称和自由相机只适合观察。
+
+armor_aim 初次直接把 TF 世界绝对角发布到 `VisionSendData` 时，命令与反馈相差接近 180°，开启控制后云台转向天空。当前适配器只从 TF 取相对方向修正，并以 `/vision_receive_data` 为绝对角基准；实测修复后一条命令与反馈分别只相差约 1.28° yaw 和 0.37° pitch，随后闭环通过。检测器默认阈值也按本机暗场画面调整为 HSV `hue=40`、`saturation>=60`、`value>=80`，关闭局部搜索并容忍 5 帧短暂丢失。
 
 ## 使用限制
 
@@ -57,4 +63,4 @@
 
 ## 许可证
 
-仿真器源码和资产沿用 AGPL-3.0。`examples/simplified_auto_aim` 保留其 MIT 许可证。继续分发或修改时请保留相应许可证和来源说明。
+仿真器源码和资产沿用 AGPL-3.0。`examples/simplified_auto_aim` 保留 MIT 许可证，`examples/armor_aim` 保留 GPL-3.0 许可证。继续分发或修改时请保留相应许可证和来源说明。

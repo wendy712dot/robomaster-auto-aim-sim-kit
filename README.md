@@ -57,8 +57,8 @@ vulkaninfo --summary
 只有在显示图像或构建附带的 C++ 自瞄例程时，才需要额外安装：
 
 ```bash
-sudo apt install -y libopencv-dev python3-opencv ros-humble-cv-bridge \
-  ros-humble-ament-index-cpp
+sudo apt install -y libopencv-dev libeigen3-dev python3-opencv \
+  ros-humble-cv-bridge ros-humble-image-transport ros-humble-ament-index-cpp
 ```
 
 ## 3. 构建并启动仿真器
@@ -163,7 +163,9 @@ python3 examples/ros2_tools/aim_adapter.py --ros-args -p enable_control:=true
 
 这个适配器只适用于相机与云台近似对齐、小角度误差的入门测试。相机存在明显外参、底盘旋转或偏角较大时，请在自己的程序中通过 TF/外参完成坐标转换。
 
-## 7. 可选 C++ 自瞄例程
+## 7. 可选自瞄例程
+
+### 7.1 单进程简化例程
 
 仓库附带了一套简化 C++ 自瞄，用来参考如何连接 ROS2；使用仿真器并不依赖它。
 
@@ -198,6 +200,18 @@ ros2 topic echo /vision_send_data --once
 
 仓库没有附带上游测试视频；视频模式需要你自行提供视频并修改 `examples/simplified_auto_aim/config/config.yaml`。
 
+### 7.2 多节点 armor_aim 例程
+
+第二套例程把检测、PnP 和输出拆成多个 ROS2 节点，并使用 `/tf` 计算目标相对当前相机应修正的方向，再把修正量锚定到 `/vision_receive_data` 的真实云台角。它已经适配为本仓库统一的 `/vision_send_data`，不再使用原方案的 `/rm_gimbal/cmd`。
+
+```bash
+bash scripts/build.sh armor
+source scripts/env.sh
+ros2 launch prm_launch sim_detector.py publish_command:=false show_window:=true
+```
+
+先完成开环识别，再按照 [`examples/armor_aim/README.md`](examples/armor_aim/README.md) 中的低速参数打开闭环。两个视觉例程不能同时运行；测试前确保 `/vision_send_data` 只有一个发布者。
+
 ## 8. 常见问题
 
 | 现象 | 先检查什么 |
@@ -208,6 +222,8 @@ ros2 topic echo /vision_send_data --once
 | 图像颜色异常 | 仿真器输出 `rgb8`，OpenCV 常用 BGR |
 | `Control: ON` 但云台不响应 | 仿真器是否为 `auto-aim=ON`；`Target` 是否为 `TRACKING`；命令是否为 `target_state: 1`；是否还有其他发布者 |
 | 云台在动但图像不随动 | 按 `F3` 切到 `camera=ROBOT`；`THIRD/FREE` 观察视角不绑定云台 |
+| armor_aim 长期显示 `NO_ARMOR` | 使用它的仿真启动文件默认阈值；确认检测蓝色、全图搜索，图像不是自由观察视角 |
+| armor_aim 开启后突然转向天空 | 立即关闭 F5；比较反馈与命令角，确认使用本仓库已适配版本，没有把 TF 绝对角直接填入 `VisionSendData` |
 | 云台越转越偏 | 度/弧度、绝对角/相对误差、yaw/pitch 正负号 |
 | 控制振荡或延迟增长 | 是否积压旧帧、单次命令是否过大、是否重复使用旧结果 |
 | 程序退出后仍移动 | 正常退出前发送无效目标；强制退出后在窗口按 `F5` |
@@ -237,9 +253,10 @@ WGPU_BACKEND=vulkan WGPU_ADAPTER_NAME=intel bash scripts/run.sh
 simulator/                      仿真器源码、资产和 ROS2 消息
 examples/ros2_tools/            收图、固定命令和误差适配工具
 examples/simplified_auto_aim/   可选 C++ 自瞄例程
+examples/armor_aim/             可选多节点 ROS2 自瞄例程
 scripts/                        构建、启动和环境脚本
 docs/                           接口与项目说明
 tests/                          控制换算单元测试
 ```
 
-仿真器沿用 AGPL-3.0；`examples/simplified_auto_aim` 保留其 MIT 许可证。
+仿真器沿用 AGPL-3.0；`examples/simplified_auto_aim` 保留 MIT 许可证，`examples/armor_aim` 保留 GPL-3.0 许可证。
