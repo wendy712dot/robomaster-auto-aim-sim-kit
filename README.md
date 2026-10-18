@@ -31,6 +31,8 @@
 - 支持 Vulkan 的显卡和正确安装的驱动
 - 可正常打开图形窗口的桌面会话
 
+强烈建议使用安装了显卡驱动的物理机或双系统。普通虚拟机缺少可靠的 GPU 加速，帧率可能很低；如果必须使用云服务器，请选择带 NVIDIA T4 等独立 GPU 的实例，并配置显卡驱动、图形桌面和远程显示。
+
 先按照 [ROS2 Humble 官方说明](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html) 配置 ROS2 软件源，然后安装基础依赖：
 
 ```bash
