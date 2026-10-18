@@ -1,120 +1,157 @@
 # ROS2 接口说明
 
-## 数据流与职责
+本文帮助你把已有自瞄程序接入仿真器。第一次接入时，请先完成根目录 README 中的图像测试和固定云台命令测试，再阅读具体字段。
+
+## 1. 数据怎样流动
 
 ```mermaid
 flowchart LR
-  S[Bevy 仿真器] -->|Image + CameraInfo| A[你的视觉程序]
-  A -->|检测 / 选板 / PnP| R[瞄准结果]
-  R -->|坐标与控制适配| C[VisionSendData]
-  C --> S
-  S -->|VisionReceiveData / TF| A
+  S[仿真器] -->|图像和相机参数| A[你的自瞄程序]
+  A --> D[检测 / 选板 / PnP]
+  D --> C[转换成绝对云台角]
+  C -->|云台命令| S
+  S -->|当前云台角反馈| C
 ```
 
-仿真器只提供场景、传感器和执行机构。视觉程序负责检测、解算、时间有效性判断与坐标转换。消息的 `header.frame_id` 是语义标记，不会替发送方自动做坐标变换。
+仿真器负责生成画面和执行云台运动。你的程序负责识别目标、判断结果是否有效，并把结果转换为正确的命令。
 
-## 话题一览
+`frame_id` 只是在消息中说明数据属于哪个坐标系，不会自动替你转换坐标。
 
-| 话题 | 类型 | 方向 | 主要语义 |
-| --- | --- | --- | --- |
-| `/image_raw` | `sensor_msgs/msg/Image` | 仿真器发布 | 默认 1440x1080、`rgb8`、Reliable |
-| `/camera_info` | `sensor_msgs/msg/CameraInfo` | 仿真器发布 | 与当前分辨率/FOV 配套的内参与零畸变 |
-| `/vision_receive_data` | `rm_interfaces/msg/VisionReceiveData` | 仿真器发布 | 当前 roll/pitch/yaw、弹速等；SensorData QoS |
-| `/vision_send_data` | `rm_interfaces/msg/VisionSendData` | 仿真器订阅 | 绝对云台角与目标状态；SensorData QoS |
-| `/tf` | `tf2_msgs/msg/TFMessage` | 仿真器发布 | `map -> odom -> gimbal_link -> camera_link -> camera_optical_frame` 等关系 |
-| `/simulator/marker` | `visualization_msgs/msg/Marker` | 仿真器发布 | 真值调试辅助，不应作为正常检测输入 |
+## 2. 需要使用的话题
 
-`/gimbal_pose`、`/camera_pose` 等 PoseStamped 在当前实现中位置字段可能是占位信息；真实姿态优先使用 `/vision_receive_data` 或核实后的 TF 链。
+| 话题 | 消息类型 | 你需要做什么 |
+| --- | --- | --- |
+| `/image_raw` | `sensor_msgs/msg/Image` | 订阅虚拟相机图像 |
+| `/camera_info` | `sensor_msgs/msg/CameraInfo` | 订阅与当前画面匹配的相机内参 |
+| `/vision_receive_data` | `rm_interfaces/msg/VisionReceiveData` | 读取当前云台角度 |
+| `/vision_send_data` | `rm_interfaces/msg/VisionSendData` | 发布绝对云台角和目标状态 |
+| `/tf` | `tf2_msgs/msg/TFMessage` | 需要完整坐标转换时读取坐标关系 |
+| `/simulator/marker` | `visualization_msgs/msg/Marker` | 只用于真值调试，不要作为正常检测输入 |
 
-## 图像与相机
+可以用下面的命令查看某种消息包含哪些字段：
 
-- 默认图像：1440x1080、`rgb8`。
-- 默认垂直 FOV：45 度。
-- 默认近似内参：`fx=fy=1303.6753`、`cx=720`、`cy=540`，畸变系数为 0。
-- 修改分辨率或 FOV 后，必须使用新的 `/camera_info`，不能继续沿用默认数值。
-- 时间戳来自系统墙钟；本仓库不要求也不建议随意启用 `use_sim_time`。
+```bash
+source scripts/env.sh
+ros2 interface show rm_interfaces/msg/VisionSendData
+```
 
-Python 订阅 QoS 示例：
+## 3. 图像与相机参数
+
+默认图像参数：
+
+```text
+宽高：1440 x 1080
+编码：rgb8
+垂直视场角：45 度
+畸变：0
+```
+
+默认内参约为 `fx=fy=1303.6753`、`cx=720`、`cy=540`。这些数值只适用于默认分辨率和视场角。
+
+正确做法是订阅 `/camera_info`，把其中的 `K` 和 `D` 交给 PnP。这样修改分辨率或视场角后，不需要手工改一组旧参数。
+
+仿真器输出 `rgb8`，而 OpenCV 常用 BGR。使用 `cv_bridge` 时可以直接转换：
+
+```cpp
+cv_bridge::toCvCopy(msg, "bgr8")->image;
+```
+
+实时处理时让队列保持较小，并优先处理最新帧。否则即使程序一直在运行，控制也可能因为处理旧图像而越来越迟。
+
+## 4. 当前云台角反馈
+
+从 `/vision_receive_data` 读取：
+
+| 字段 | 含义 |
+| --- | --- |
+| `yaw` | 当前 yaw，单位度 |
+| `pitch` | 当前 pitch，单位度 |
+| `roll` | 当前 roll，单位度 |
+| `bullet_speed` | 当前仿真弹速 |
+
+这个话题使用 SensorData QoS。Python 中可以直接使用：
 
 ```python
-qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE)
-node.create_subscription(Image, '/image_raw', callback, qos)
+from rclpy.qos import qos_profile_sensor_data
 ```
 
-实时视觉应尽量消费最新帧，避免处理能力不足时旧帧持续积压。接收 FPS 和算法处理 FPS 应分别记录。
+不要永久保存并使用最后一次反馈。超过你的超时时间仍没有收到新反馈时，应停止输出有效目标。
 
-## 云台反馈
+## 5. 发送云台命令
 
-`VisionReceiveData` 中接入最常用的字段：
+向 `/vision_send_data` 发布 `VisionSendData`。当前仿真器真正使用的主要字段是：
 
-| 字段 | 单位/含义 |
+| 字段 | 怎样填写 |
 | --- | --- |
-| `roll` | 当前横滚角，度 |
-| `pitch` | 当前俯仰角，度 |
-| `yaw` | 当前航向角，度 |
-| `bullet_speed` | 仿真配置中的弹速，当前消息字段为 `uint8` |
-| `self_color` | 当前受控红方场景固定为 0，不代表已支持任意队伍自动识别 |
+| `yaw` | 绝对角，单位度；当前约定向左为正 |
+| `pitch` | 绝对角，单位度；当前约定向下为正 |
+| `target_state` | `0` 无效，`1` 有效但不射击，`2` 请求射击 |
+| `target_distance` | 目标距离，示例使用米；无效时填 `-1.0` |
+| `control_id` | 可选的命令序号，便于查看日志 |
 
-该话题使用 SensorData QoS（Best Effort、深度小）。命令适配器应给反馈设置超时，不能永久使用最后一次姿态。
+这里的“绝对角”表示命令中填写云台最终应朝向的角度，而不是“再向左转多少度”。
 
-## 云台命令
+例如当前反馈为 `yaw=10°`，目标在画面右侧 2°。按照本仓库的约定，新的绝对命令约为：
 
-`VisionSendData` 中当前仿真器实际使用的关键字段：
+```text
+10° - 2° = 8°
+```
 
-| 字段 | 单位/含义 |
-| --- | --- |
-| `yaw` | 世界参考下的绝对 yaw，度；当前约定左正 |
-| `pitch` | 绝对 pitch，度；当前约定下正；仿真器内部写入 Bevy 时反号 |
-| `target_state` | 0=无效/停止追踪，1=有效且不射击，2=有效并请求射击 |
-| `target_distance` | 目标距离，示例统一使用米；`-1.0` 表示无效 |
-| `control_id` | 可选控制序号，便于调试 |
+请先用 `gimbal_probe.py` 在实际画面中确认正负方向，再采用这个关系。若越转越偏，通常是正负号、角度单位或绝对角/相对误差混淆。
 
-`delta_yaw`、`delta_pitch` 等字段不是当前基线的主要控制输入。`target_state=2` 按请求上升沿并受限频处理；最小接入时保持 `target_state=1`，不要测试射击。
+`delta_yaw` 和 `delta_pitch` 不是当前版本的主要控制输入。第一次接入时不要使用它们。
 
-仿真器保存最近的有效目标角，并以限速方式继续趋近目标。因此“停止发布”不等于“停止追踪”。正常失效时应持续短暂发布：
+## 6. 目标无效时怎么做
+
+以下任一情况出现时，都不要继续发送旧目标：
+
+- 没检测到目标；
+- PnP 求解失败；
+- 图像已经过期或中断；
+- 云台反馈已经过期；
+- 结果中出现 NaN、无穷大或不合理距离。
+
+应发送：
 
 ```text
 target_state = 0
 target_distance = -1.0
-yaw/pitch = 最近一次有效反馈（如可用）
 ```
 
-客户端崩溃或被强制杀死时，退出保护可能无法执行；此时在窗口中按 `F5` 关闭自动控制。
+如果仍有新鲜的云台反馈，可以把当前反馈角写入 `yaw/pitch`。仿真器收到无效目标后会清除追踪目标并保持姿态。
 
-## 从视觉结果到命令
+仅停止发布不等于停止追踪，因为仿真器会保存最近的有效目标角。正常退出程序前应连续发送几次无效目标；程序崩溃或被强制结束时，在仿真器窗口按 `F5` 关闭自动控制。
 
-不要把 PnP 输出不加判断地直接填入 `yaw/pitch`。先明确自己的输出属于哪一种：
+## 7. 怎样选择转换方法
 
-1. 相机坐标中的像素/角度误差：需要结合当前反馈和方向约定换成绝对角。
-2. 相机坐标中的三维目标点：需要通过相机外参/TF 旋转到所需参考系，再求绝对角。
-3. 已经是世界系绝对角：核对单位和正负号后可直接发布。
+先确认你的自瞄程序输出什么：
 
-仓库的最小适配器只覆盖第一种的小角度近似：
+### 输出是画面中的角度误差
+
+小角度、相机与云台近似对齐时，可以参考：
 
 ```text
-command_yaw   = feedback_yaw   - clamp(right_positive_yaw_error)
-command_pitch = feedback_pitch - clamp(up_positive_pitch_error)
+命令 yaw   = 当前 yaw   - 右正 yaw 误差
+命令 pitch = 当前 pitch - 上正 pitch 误差
 ```
 
-它带有 0.15 度死区、单次 2 度限幅、视觉结果/反馈 200 ms 超时，并且同一结果只计算一次修正。参数可通过 ROS2 参数调整，但应先用固定命令验证物理方向。
+仓库中的 `aim_adapter.py` 就是这种入门示例，并带有限幅、死区和超时保护。
 
-## 接入验收顺序
+### 输出是相机坐标中的三维目标点
 
-1. `image_probe.py` 能持续收到图像和匹配的 CameraInfo。
-2. `gimbal_probe.py` 的小幅绝对角命令方向正确，结束后停止状态有效。
-3. 视觉程序开环运行，确认 RGB/BGR、内参、装甲尺寸、角点顺序和距离单位。
-4. 只保留一个命令发布者，静止目标、小偏角启用闭环。
-5. 依次测试无目标、PnP 失败、图像中断、反馈中断；都不得继续把旧结果当成有效目标。
-6. 最后再测试目标运动和己方运动；本仓库不替用户实现预测、EKF、惯性补偿或弹道模型。
+先用相机外参或 `/tf` 把目标方向转换到需要的参考系，再计算绝对 yaw/pitch。不要直接把三维坐标或相机系角度塞进绝对角字段。
 
-## 排查要点
+### 输出已经是世界系绝对角
 
-| 现象 | 检查 |
-| --- | --- |
-| 图像正常但颜色检测失败 | `rgb8` 到 BGR 的转换与颜色阈值 |
-| 距离或角度明显错误 | CameraInfo、分辨率/FOV、装甲尺寸/单位、四角点顺序 |
-| 有消息但云台不动 | `F5`、`target_state`、`target_distance`、重复发布者 |
-| 云台越转越偏 | 正负号、度/弧度、绝对角/相对误差、参考系 |
-| 越来越延迟 | 队列深度、是否消费最新帧、接收与处理 FPS |
-| 退出后仍跟踪 | 是否发送无效目标；强退时用 `F5` |
-| PoseStamped 总为零 | 改用反馈或核实 TF，不把占位话题当真实姿态 |
+核对单位为度、方向与本文一致后，可以直接发布。
+
+## 8. 推荐测试顺序
+
+1. 运行 `image_probe.py`，确认图像、编码、CameraInfo 和接收帧率。
+2. 运行 `gimbal_probe.py`，确认绝对角、单位和正负方向。
+3. 让你的算法开环处理图像，只观察检测与 PnP 结果。
+4. 只保留一个命令发布者，在静止目标和小偏角下打开闭环。
+5. 分别制造无目标、PnP 失败、图像中断和反馈中断，检查云台不再使用旧结果。
+6. 最后测试移动目标或己方运动。
+
+如果静止场景仍不能稳定，不要急着加入预测、EKF 或复杂控制器。先排除图像积压、相机参数、装甲尺寸、角点顺序、单位和正负号问题。

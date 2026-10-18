@@ -1,46 +1,51 @@
-# 整合记录与验证状态
+# 项目说明
 
-## 来源与基线
+这份说明告诉你仓库从哪里来、做过哪些整理，以及使用时需要注意哪些限制。实际安装和接入请从根目录 README 开始。
 
-- 仿真器来源：[wendy712dot/bevy_robomaster_simulator](https://github.com/wendy712dot/bevy_robomaster_simulator)，基线分支 `fix/ros2-interface-compatibility`，提交 `7c075703d99192b940d1310bf674253f5d08d532`。
-- 上游仿真器：[HNUYueLuRM/bevy_robomaster_simulator](https://github.com/HNUYueLuRM/bevy_robomaster_simulator) 与 [Blackjack200/bevy_robomaster_simulator](https://github.com/Blackjack200/bevy_robomaster_simulator)。
+## 来源
+
+- 仿真器基线：[wendy712dot/bevy_robomaster_simulator](https://github.com/wendy712dot/bevy_robomaster_simulator) 的 `fix/ros2-interface-compatibility` 分支，提交 `7c075703d99192b940d1310bf674253f5d08d532`。
+- 上游项目：[HNUYueLuRM/bevy_robomaster_simulator](https://github.com/HNUYueLuRM/bevy_robomaster_simulator) 和 [Blackjack200/bevy_robomaster_simulator](https://github.com/Blackjack200/bevy_robomaster_simulator)。
 - 可选视觉例程：[wendy712dot/simplified-auto-aim-system](https://github.com/wendy712dot/simplified-auto-aim-system)。
-- 接入经验参考：[lijjinyu-coder/armor_aim 的 feature/simulator-integration 分支](https://github.com/lijjinyu-coder/armor_aim/tree/feature/simulator-integration)。
+- 接入经验参考：[armor_aim 的 simulator-integration 分支](https://github.com/lijjinyu-coder/armor_aim/tree/feature/simulator-integration)。
 
-仿真器源码与资产保持其 AGPL-3.0 许可证；可选视觉例程保留 MIT 许可证。两套视觉方案采用了不同命令接口，本仓库只把当前基线实际订阅的 `/vision_send_data` 作为默认控制接口，不把另一版本的 `/rm_gimbal/cmd` 描述为兼容接口。
+不同来源使用过不同的云台消息。本仓库只把当前仿真器实际接收的 `/vision_send_data` 作为默认控制接口。不要照搬其他版本的 `/rm_gimbal/cmd` 字段和控制参数。
 
-## 本次整理
+## 仓库做过的整理
 
-- 保留仿真器源码、模型/音频资产、`rm_interfaces` 与锁定依赖。
-- ROS2 捕获显式使用 `Rgba8UnormSrgb`/`Depth32Float`，避免依赖已弃用的默认纹理格式 trait。
-- 默认关闭 `power_rune.auto_aim_enabled` 与 `vision_test_pose`，以通用出生点和手动开启控制开始。
-- 增加相对路径构建/启动脚本，默认仅构建仿真器；完整视觉例程为可选模式。
-- 增加图像订阅、有限时长固定云台命令和小角度误差适配工具。
-- 适配器对旧视觉结果、旧反馈、非法数值和无目标状态做保护；同一视觉结果不会在 20 Hz 定时器中重复累计修正。
-- 新增接口、坐标、控制语义、停止行为和排错说明。
-- 保留第一套完整 C++ 自瞄为可选例程；未迁移其测试视频和演示文件。
+- 保留仿真器源码、模型、音频、ROS2 消息和锁定依赖。
+- 提供从仓库根目录执行的构建、启动和环境脚本。
+- 默认关闭自动控制，由你在窗口中按 `F5` 开启。
+- 提供图像接收、固定云台命令和小角度误差适配工具。
+- 适配器会检查非法数值和超时；同一帧视觉结果不会重复累计修正。
+- 保留一套简化 C++ 自瞄作为参考，但不要求你使用它。
+- 补充图像编码、CameraInfo、角度单位、正负方向、停止行为和排查说明。
 
-第二套方案仅用于吸收 QoS、TF、输入/输出职责分离、超时保护和测试记录方面的经验，没有直接迁入其 PID、GimbalCmd 或完整硬件/导航工程。
+第二套方案只用于参考 QoS、TF、超时保护和输入/输出职责划分，没有把它的完整工程、PID 或另一套云台接口混入默认流程。
 
-## 当前验证状态
+## 已完成的检查
 
-整理环境：Ubuntu 22.04.5、ROS2 Humble、colcon、Rust/rustup 可用。
+整理环境为 Ubuntu 22.04.5、ROS2 Humble。
 
-| 项目 | 状态 |
+| 检查项 | 结果 |
 | --- | --- |
-| Python 控制数学单元测试 | 通过：7/7 |
-| Shell/Python 静态检查 | 通过：`bash -n` 与 `py_compile` |
-| `rm_interfaces` colcon 构建 | 通过 |
+| 控制换算单元测试 | 7 项全部通过 |
+| Shell 和 Python 语法检查 | 通过 |
+| `rm_interfaces` ROS2 消息构建 | 通过 |
 | 可选 `auto_aim_ros2` C++ 构建 | 通过 |
-| Rust ROS2-only release 构建 | 通过；仅有上游 prelude 未使用导入警告 |
-| 仿真窗口与 Vulkan | 二进制已启动到窗口初始化；当前 Codex 沙箱无法连接 X 显示，报 `XOpenDisplayFailed`，且未安装 `vulkaninfo` |
-| 图像、固定命令、闭环运行 | 未实测；必须在能访问桌面 GPU/显示会话的终端完成，不能以构建通过代替 |
+| Rust ROS2-only release 构建 | 通过 |
 
-## 已知限制
+图形窗口、实际收图、云台方向和闭环效果仍应在你的桌面环境中按 README 逐项确认。编译通过不能代替实际画面和运动验证。
 
-- 默认相机内参只适用于默认 1440x1080、45 度垂直 FOV；通用接入应读 `/camera_info`。
-- `self_color=0` 是当前受控红方场景值，不是通用队伍自动识别。
-- 客户端正常退出可以发送无效目标；进程崩溃时仿真端没有通用失联看门狗，需用 `F5` 关闭自动控制。
-- 小角度适配器假设相机与云台近似对齐，不覆盖完整 TF、底盘姿态、弹道或大角度转换。
-- 可选 C++ 例程使用固定仿真相机参数，且视频素材未包含；它是接口参考，不是所有用户必须采用的视觉算法。
-- 首次 Cargo 构建下载和编译量较大，实际性能取决于 GPU、驱动、分辨率与场景配置；本仓库不承诺未经测量的最低配置或 FPS。
+## 使用限制
+
+- 默认内参只对应 1440x1080 和 45 度垂直视场角；你的程序应订阅 `/camera_info`。
+- `self_color=0` 是当前受控红方场景值，不表示已经支持自动切换队伍。
+- 仿真器会保存最后一个有效目标角。目标无效时需要主动发送停止状态；程序被强制结束后请按 `F5`。
+- `aim_adapter.py` 只用于相机与云台近似对齐的小角度测试，不包含完整外参、底盘姿态、弹道或运动预测。
+- 可选 C++ 例程使用固定仿真相机参数，且没有附带测试视频；它只是接入参考。
+- 首次 Cargo 构建耗时和运行帧率取决于 CPU、GPU、驱动、分辨率与场景配置。
+
+## 许可证
+
+仿真器源码和资产沿用 AGPL-3.0。`examples/simplified_auto_aim` 保留其 MIT 许可证。继续分发或修改时请保留相应许可证和来源说明。
