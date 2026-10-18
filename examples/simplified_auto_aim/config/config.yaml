@@ -1,0 +1,44 @@
+%YAML:1.0
+---
+
+enemy:
+  color: "blue"
+
+preprocess:
+  method: "color_difference"
+  binary_threshold: 150
+
+light_bar:
+  min_area: 10.0
+  min_ratio: 1.6
+  min_angle: 60.0
+
+armor:
+  max_height_ratio: 1.5
+  max_y_ratio: 0.7
+  min_armor_aspect_ratio: 1.5
+  max_armor_aspect_ratio: 5.0
+
+target:
+  tracking_threshold: 3
+  temporary_lost_threshold: 5
+
+camera:
+  use_approximate_intrinsics: 1
+  fx_scale: 1.0
+  fy_scale: 1.0
+  k1: 0.0
+  k2: 0.0
+  p1: 0.0
+  p2: 0.0
+  k3: 0.0
+
+armor_size:
+  width_mm: 135.0
+  height_mm: 55.0
+
+debug:
+  show_binary: 1
+  show_all_rects: 1
+  show_filtered_light_bars: 1
+  show_result: 1

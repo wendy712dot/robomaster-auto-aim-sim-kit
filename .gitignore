@@ -1,0 +1,13 @@
+**/target/
+**/build/
+**/install/
+**/log/
+**/__pycache__/
+*.pyc
+*.avi
+*.mp4
+*.webm
+/simulator/dataset/
+**/screenshot-*.png
+.ros_ws/
+.venv/
