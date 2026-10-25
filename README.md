@@ -63,6 +63,15 @@ sudo apt install -y libopencv-dev libeigen3-dev python3-opencv \
   ros-humble-cv-bridge ros-humble-image-transport ros-humble-ament-index-cpp
 ```
 
+第一次使用时下载仓库并进入根目录：
+
+```bash
+git clone https://github.com/wendy712dot/robomaster-auto-aim-sim-kit.git
+cd robomaster-auto-aim-sim-kit
+```
+
+如果已经下载过仓库，只需进入现有的 `robomaster-auto-aim-sim-kit` 目录，不要重复克隆。
+
 ## 3. 构建并启动仿真器
 
 第一次构建会下载和编译较多 Rust 依赖，耗时较长属于正常现象。
@@ -70,19 +79,56 @@ sudo apt install -y libopencv-dev libeigen3-dev python3-opencv \
 在终端 A 执行：
 
 ```bash
-cd /你的路径/robomaster-sim-kit
+cd /你的路径/robomaster-auto-aim-sim-kit
 bash scripts/build.sh
 bash scripts/run.sh
 ```
 
-成功后会出现仿真器窗口。先点击窗口，再按一次 `F5` 打开自动控制；再次按下会关闭。默认关闭是为了防止测试程序意外接管云台。左下角必须显示 `auto-aim=ON`；ThinkPad 等笔记本若把 F5 用作硬件功能键，请使用 `Fn+F5`。
+成功后会出现仿真器窗口。键盘和鼠标操作前要先点击窗口，使它获得输入焦点。窗口左下角会显示 `auto-aim`、`camera`、`flight` 和命中统计；首次启动应为 `auto-aim=OFF camera=ROBOT`。
 
-左下角还会显示相机模式。闭环自瞄时必须使用 `camera=ROBOT`，此时 `/image_raw` 是随云台转动的第一人称画面。`F3` 会在 `ROBOT`、`THIRD` 和 `FREE` 三种模式间循环；后两种适合观察场景，但画面不会随受控云台转动，不能用来判断闭环是否居中。
+### 3.1 界面状态和视角
 
-不要关闭终端 A。另开终端 B，进入同一个仓库并加载 ROS2 环境：
+- `auto-aim=OFF/ON`：是否接受 `/vision_send_data` 控制。默认关闭，完成开环检查前不要打开。
+- `camera=ROBOT`：第一人称机器人相机，闭环自瞄必须使用这个模式。
+- `camera=THIRD`：第三人称观察，只适合查看机器人运动。
+- `camera=FREE`：自由观察视角，只适合查看场景；此时 `WASD` 控制观察相机而不是己方机器人。
+- `flight=OFF/ON`：己方机器人的飞行模式状态。
+
+按 `F3` 会依次切换 `ROBOT → THIRD → FREE → ROBOT`。`THIRD` 和 `FREE` 的画面不会随受控云台按第一人称方式运动，不能用来判断闭环是否居中。
+
+### 3.2 常用操作
+
+| 功能 | 按键 | 说明 |
+| --- | --- | --- |
+| 切换视角 | `F3` | 在 `ROBOT`、`THIRD`、`FREE` 间循环 |
+| 开关自动控制 | `F5` | `ON` 时接受视觉程序的云台命令；再次按下关闭 |
+| 截图 | `F2` | 保存到 `simulator/screenshot-N.png` |
+| 己方移动 | `W` `A` `S` `D` | 按住左 `Shift` 可加速 |
+| 己方底盘旋转 | `Q` `E` | 与云台旋转相互独立 |
+| 手动转动己方云台 | 方向键 | 只在 `auto-aim=OFF` 时生效 |
+| 发射弹丸 | `Space` | 按住可连续发射 |
+| 跳跃 | `R` | 飞行模式关闭时使用 |
+| 飞行模式 | `H` | 开关飞行；开启后用 `R` 上升、`X` 下降 |
+
+ThinkPad 等笔记本若把功能键用于音量、亮度等硬件操作，请使用 `Fn+F2`、`Fn+F3` 或 `Fn+F5`。
+
+需要制造移动目标时，可以控制场景中的假人：
+
+| 功能 | 按键 |
+| --- | --- |
+| 切换当前假人 | `Tab` |
+| 假人移动 | `I` `J` `K` `L`，右 `Shift` 加速 |
+| 假人底盘旋转 | `U` `O` |
+| 假人云台上下/左右 | `F` `V` / `C` `B` |
+
+在 `camera=FREE` 时，用 `WASD` 水平移动观察相机、`N/J` 上升或下降、移动鼠标转动视角。测试自瞄时，最常用的操作只有 `F3`、`F5`、方向键和两组机器人移动键。
+
+> 安全提示：先保持 `auto-aim=OFF` 完成图像、检测和命令角检查，准备闭环时再按 `F5`。如果云台突然转向错误方向，第一时间按 `F5` 关闭自动控制。打开自动控制后，方向键不会再手动修改云台，避免和视觉命令互相冲突。
+
+运行期间不要关闭终端 A；结束时回到终端 A 按 `Ctrl+C`。另开终端 B，进入同一个仓库并加载 ROS2 环境：
 
 ```bash
-cd /你的路径/robomaster-sim-kit
+cd /你的路径/robomaster-auto-aim-sim-kit
 source scripts/env.sh
 ros2 topic list
 ```
@@ -111,7 +157,7 @@ python3 examples/ros2_tools/image_probe.py --ros-args -p show:=true
 
 ### 4.2 验证控制云台
 
-确认仿真器窗口中自动控制已经打开，然后执行：
+确认仿真器为 `camera=ROBOT`，点击窗口并按 `F5`，看到 `auto-aim=ON` 后执行：
 
 ```bash
 python3 examples/ros2_tools/gimbal_probe.py --yaw 5 --pitch 0 --seconds 2
